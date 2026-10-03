@@ -1,0 +1,3 @@
+import { NextRequest, NextResponse } from "next/server"; import { decideApproval, getState } from "@/lib/store";
+export async function GET(){ return NextResponse.json(getState().approvals); }
+export async function POST(req:NextRequest){ const body=await req.json(); const approval=decideApproval(body.id,body.decision); if(!approval) return NextResponse.json({error:"Approval not found"},{status:404}); return NextResponse.json(approval); }

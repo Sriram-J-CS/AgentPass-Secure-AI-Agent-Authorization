@@ -44,7 +44,7 @@ const ATTACKS = [
 ];
 
 export default function Home(){
-  const [entered,setEntered]=useState(false);
+  const [stage,setStage]=useState<"landing"|"auth"|"console">("landing");
   const [screen,setScreen]=useState<Screen>("overview");
   const [state,setState]=useState<AppState|null>(null);
   const [selected,setSelected]=useState<SecurityEvent|null>(null);
@@ -99,9 +99,8 @@ export default function Home(){
     finally{setRunning(null);}
   }
 
-  if(!entered){
-    return <Landing onConsole={()=>setEntered(true)} onAttack={()=>{setEntered(true);setScreen("attacks")}}/>
-  }
+  if(stage==="landing") return <Landing onConsole={()=>setStage("auth")} onAttack={()=>{setStage("console");setScreen("attacks")}}/>;
+  if(stage==="auth") return <AuthScreen onBack={()=>setStage("landing")} onSuccess={()=>setStage("console")}/>;
 
   const pending=(state?.approvals||[]).filter(a=>a.status==="PENDING").length;
 
@@ -129,7 +128,7 @@ export default function Home(){
             <div className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/[.05] text-[10px]">SJ</div>
             <div className="min-w-0"><div className="truncate text-xs">Workspace owner</div><div className="truncate text-[10px] text-white/30">Protected workspace</div></div>
           </div>
-          <button onClick={()=>setEntered(false)} className="mt-3 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs text-white/40 hover:bg-white/[.03]"><LogOut size={14}/>Sign out</button>
+          <button onClick={()=>setStage("landing")} className="mt-3 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs text-white/40 hover:bg-white/[.03]"><LogOut size={14}/>Sign out</button>
         </div>
       </aside>
 
@@ -147,6 +146,7 @@ export default function Home(){
             </div>
           </div>
         </header>
+        <div className="flex gap-1 overflow-x-auto border-b border-white/[.05] px-3 py-2 lg:hidden">{NAV.map(([id,label,Icon])=><button key={id} onClick={()=>setScreen(id)} className={"shrink-0 rounded-lg px-3 py-2 text-[10px] "+(screen===id?"bg-white/[.07] text-white":"text-white/40")}><Icon size={13} className="inline mr-1.5"/>{label}</button>)}</div>
         <div className="p-4 md:p-6 xl:p-8">
           {!state ? <EmptyState title="Security gateway unavailable" body="The control plane did not respond. Retry to restore the security console." button={<Button onClick={refresh}>Retry</Button>}/> : <ScreenView screen={screen} state={state} run={run} running={running} reset={reset} revoke={revoke} selected={selected} setSelected={setSelected} setScreen={setScreen} refresh={refresh}/>}
         </div>
@@ -192,6 +192,33 @@ function DecisionTile({label,value,tone}:{label:string;value:string;tone:"green"
  return <div className={"rounded-xl border p-3 text-center "+cls}><div className="text-[10px] uppercase">{label}</div><div className="mono mt-1 text-lg">{value}</div></div>
 }
 function Value({title,body,icon}:{title:string;body:string;icon:React.ReactNode}){return <div className="flex gap-3"><div className="mt-0.5 text-white/40">{icon}</div><div><div className="mono text-[10px] tracking-[.14em] text-white/35">{title}</div><p className="mt-1 text-xs leading-5 text-white/45">{body}</p></div></div>}
+
+
+function AuthScreen({onBack,onSuccess}:{onBack:()=>void;onSuccess:()=>void}){
+ const [mode,setMode]=useState<"signin"|"register">("signin");
+ const [email,setEmail]=useState("");
+ const [password,setPassword]=useState("");
+ const [name,setName]=useState("");
+ const [error,setError]=useState("");
+ function submit(e:React.FormEvent){e.preventDefault();if(!email||!password||(mode==="register"&&!name)){setError("Complete the required fields.");return}setError("");onSuccess();}
+ return <div className="flex min-h-[80vh] items-center justify-center">
+   <div className="w-full max-w-md">
+     <button onClick={onBack} className="mb-6 text-xs text-white/35 hover:text-white/65">← Back to AgentPass</button>
+     <div className="glass rounded-3xl p-6 md:p-8">
+       <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[.04]"><ShieldCheck size={18}/></div><div><div className="text-sm font-semibold">Protected workspace</div><div className="text-[10px] text-white/35">AgentPass Security Console</div></div></div>
+       <div className="mt-8 flex rounded-lg border border-white/10 bg-white/[.025] p-1"><button onClick={()=>setMode("signin")} className={"flex-1 rounded-md py-2 text-xs "+(mode==="signin"?"bg-white/[.08] text-white":"text-white/40")}>Sign in</button><button onClick={()=>setMode("register")} className={"flex-1 rounded-md py-2 text-xs "+(mode==="register"?"bg-white/[.08] text-white":"text-white/40")}>Register</button></div>
+       <form onSubmit={submit} className="mt-6 space-y-4">
+         {mode==="register"?<label className="block"><span className="mb-2 block text-[10px] uppercase tracking-[.1em] text-white/35">Name</span><input value={name} onChange={e=>setName(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm outline-none focus:border-[#7aa2ff]/40" placeholder="Your name"/></label>:null}
+         <label className="block"><span className="mb-2 block text-[10px] uppercase tracking-[.1em] text-white/35">Email</span><input type="email" value={email} onChange={e=>setEmail(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm outline-none focus:border-[#7aa2ff]/40" placeholder="you@company.com"/></label>
+         <label className="block"><span className="mb-2 block text-[10px] uppercase tracking-[.1em] text-white/35">Password</span><input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm outline-none focus:border-[#7aa2ff]/40" placeholder="••••••••"/></label>
+         {error?<div className="rounded-lg border border-[#ff717d]/20 bg-[#ff717d]/[.06] px-3 py-2 text-xs text-[#ff8993]">{error}</div>:null}
+         <Button className="w-full" >{mode==="signin"?"Sign in":"Create workspace"}</Button>
+       </form>
+       <div className="mt-5 text-center text-[10px] text-white/25">OAuth providers are intentionally not enabled without configured credentials.</div>
+     </div>
+   </div>
+ </div>
+}
 
 function ScreenView(props:{screen:Screen;state:AppState;run:(s:string)=>void;running:string|null;reset:()=>void;revoke:()=>void;selected:SecurityEvent|null;setSelected:(e:SecurityEvent)=>void;setScreen:(s:Screen)=>void;refresh:()=>void}){
  const {screen,state}=props;

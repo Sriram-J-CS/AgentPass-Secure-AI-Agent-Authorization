@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: agentpass-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    region: singapore
+    autoDeploy: true
+    envVars:
+      - key: APP_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agentpass-db
+          property: connectionString
+      - key: VAULT_MASTER_KEY
+        generateValue: true
+  - type: web
+    name: agentpass-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    plan: free
+    region: singapore
+    autoDeploy: true
+    envVars:
+      - key: VITE_API_BASE
+        sync: false
+databases:
+  - name: agentpass-db
+    plan: free
+    region: singapore
+    databaseName: agentpass_db
+    user: agentpass_db_user

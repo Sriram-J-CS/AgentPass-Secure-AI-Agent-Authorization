@@ -23,56 +23,166 @@
 
 ## 💡 What is AgentPass?
 
-When you give an autonomous AI agent an API key or an OAuth token, you are taking a massive security gamble: **if the agent gets prompt-injected or leaked, the attacker inherits everything that token can touch.**
+When you give an autonomous AI agent an API key or an OAuth token, you take a critical security risk: **if the agent gets prompt-injected or leaked, the attacker inherits everything that credential can touch.**
 
-Traditional IAM protects human-to-service and service-to-service connections. It has no concept of an **AI agent as an untrusted, delegable execution principal**.
+Traditional IAM manages human-to-service or service-to-service connections. It has no model for an **AI agent as an untrusted, delegable execution principal**.
 
-**AgentPass solves this by decoupling agent execution from authority:**
-- **Never trust the model to decide its own authority.** The LLM never decides whether an action is allowed.
-- **Short-Lived, Task-Scoped Authority (Passes):** An agent only receives permissions for the specific task at hand (e.g., 15 minutes to read invoices, max 50 reads, 0 outbound sends).
-- **Cryptographic Proof-of-Possession:** Private signing keys stay isolated in a sidecar outside the LLM context. Stolen tokens or intercepted pass IDs are useless without the agent's private key signature.
-- **Intent Firewall & Gateway Verification:** Every tool call is intercepted by an external gateway that verifies cryptographic signatures, replay nonces, scope boundaries, and task intent before any tool or API can execute.
-- **Reversible Human Step-Up:** High-risk actions (e.g., payments, file deletions) pause for human sign-off without killing the agent's active safe sub-tasks.
+**AgentPass decouples agent execution from authority:**
+- **Core Security Law: Never trust the model to decide its own authority.** The LLM is never the final authority for whether a tool call executes.
+- **Short-Lived, Task-Scoped Authority (Passes):** An agent only receives authority for the specific task at hand (e.g., 15 minutes to read invoices, max 50 reads, 0 outbound sends).
+- **Cryptographic Proof-of-Possession:** Private signing keys reside strictly in an isolated sidecar outside the LLM context. Stolen tokens or leaked pass IDs are useless without the agent's private key signature.
+- **Intent Firewall & Gateway Verification:** Every tool call is intercepted by an external gateway that verifies cryptographic signatures, replay nonces, scope boundaries, and task intent before any tool or API executes.
+- **Reversible Human Step-Up:** Sensitive actions (e.g., payments, file deletions) pause for human operator approval without killing the agent's active safe sub-tasks.
 
 ---
 
-## 🏛️ System Architecture
+## 🏛️ Comprehensive System Architecture
 
 <div align="center">
 <img src="./assets/system_architecture.png" alt="AgentPass System Architecture" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
-<p align="center"><em>AgentPass High-Level Architecture: Distinct trust boundaries separating the Human Operator, the Untrusted AI Model, the Security Gateway, and Target Tools.</em></p>
+<p align="center"><em>AgentPass Architecture: Cryptographic trust boundaries separating the Human Operator, the Untrusted AI Model, the Security Gateway, and Target Tools.</em></p>
 </div>
 
-### How the Architecture Works (In Plain English)
+### Architectural Trust Boundaries
 
-The architecture is divided into **four clear trust zones**:
+The system is architected around **four strict trust zones**:
 
-#### 1. Human Operator & Pass Issuer (The Trust Root)
-- The human operator defines a specific job (e.g., *"Summarize this week's invoices"*).
-- The **Pass Issuer** generates a short-lived **Pass** (`PASS-INV-001`) with:
-  - **Explicit Scopes:** `email.read:invoices`, `file.read:invoice_pdf` (no send, delete, or payment permissions).
-  - **Tight Expiry:** 15 minutes maximum lifespan.
-  - **Action Budget:** e.g., max 50 reads, 0 external emails.
-- The agent's public key is registered with the Security Gateway.
+```
+[ 👤 HUMAN OPERATOR & ISSUER ] (Trust Root)
+              │
+              │ 1. Defines task & issues scoped Pass
+              ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 🤖 AI AGENT RUNTIME (Untrusted Zone)                         │
+│                                                             │
+│   [ LLM / AI AGENT ]             [ SIGNER SIDECAR ]         │
+│   (Untrusted by design)          (Isolated Key Store)       │
+│            │                              │                 │
+│            │ 2. Submits tool request      │                 │
+│            └─────────────────────────────►│                 │
+│                                           │ 3. Signs proof  │
+│                                           ▼ (Ed25519)       │
+└─────────────────────────────┬───────────────────────────────┘
+                              │
+                              │ 4. POST /agent/request (Pass + Proof)
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 🛡️ AGENTPASS SECURITY GATEWAY (Enforcement Point)           │
+│                                                             │
+│  Stage 1: Proof-of-Possession (Verifies Ed25519 signature)  │
+│  Stage 2: Anti-Replay Engine (Unique nonce + timestamp)     │
+│  Stage 3: Payload Integrity (Canonical SHA-256 body hash)   │
+│  Stage 4: Scope & Action Budget (Pass scope verification)   │
+│  Stage 5: Intent Firewall (Structured task alignment)       │
+│  Stage 6: Behavioral Twin (Frequency & volume anomalies)    │
+└─────────────────────────────┬───────────────────────────────┘
+                              │
+                              │ 5. Policy Decision
+                              ▼
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+    🟢 ALLOW              🟡 STEP-UP            🔴 DENY
+        │                     │                     │
+  Safe read in-scope    High-risk action      Prompt injection,
+  tool executes         (WebAuthn sign-off)   stolen pass blocked
+        │                     │                     │
+        └─────────────────────┼─────────────────────┘
+                              ▼
+             [ ⛓️ SHA-256 HASH-CHAIN AUDIT LOG ]
+```
 
-#### 2. AI Agent Runtime & Signer Sidecar (The Untrusted Zone)
-- **The AI Agent (LLM):** Treated as **untrusted by design**. Even if the agent is manipulated by a prompt injection attack from an email or invoice, it cannot grant itself more permissions.
-- **Isolated Signer Sidecar:** The private cryptographic signing key (Ed25519) is kept **strictly outside the LLM context** in an isolated sidecar process.
-- When the agent wants to call a tool, it asks the sidecar to sign the request metadata (`Tool + Nonce + Timestamp + SHA256(Body)`). The LLM never sees or extracts the private key.
+---
 
-#### 3. AgentPass Security Gateway (The Enforcement Point)
-Every tool or API call must pass through the external Gateway before reaching real tools. The gateway checks:
-1. **Signature Validity:** Did this request come from the registered agent key?
-2. **Anti-Replay Nonce:** Has this specific nonce or request already been seen?
-3. **Payload Integrity:** Does the SHA-256 hash of the request body match what was signed?
-4. **Scope & Budget:** Is this specific tool and action allowed by the active pass?
-5. **Intent Firewall:** Does the destination/action match the authorized human task?
-6. **Behavioral Twin:** Is the volume or tool sequence abnormal compared to baseline?
+### Core Architecture Components
 
-#### 4. Decisions & Action Execution
-- **🟢 ALLOW:** Safe, in-scope read actions. The Gateway retrieves credentials from its encrypted vault and executes the tool.
-- **🟡 STEP-UP:** Sensitive actions (e.g., payments or file deletions). The Gateway pauses the call and notifies the human operator for WebAuthn / Passkey sign-off.
-- **🔴 DENY:** Prompt injections, stolen tokens, or out-of-scope actions are blocked instantly. The tool never executes.
+#### 1. Agent Identity & Pass Issuer (The Trust Root)
+The Pass Issuer creates a distinct, ephemeral identity for each agent task. Authority is never persistent; it is issued as a structured **Pass**:
+
+```json
+{
+  "pass_id": "PASS-INV-001",
+  "agent_id": "FinanceBot-01",
+  "owner_id": "user-corp-04",
+  "task": "Summarize this week's invoices",
+  "expires_in_seconds": 900,
+  "scopes": [
+    "email.read:invoices",
+    "file.read:invoice_pdf"
+  ],
+  "budgets": {
+    "email_reads": 50,
+    "external_sends": 0,
+    "payments": 0,
+    "file_exports": 0
+  },
+  "public_key_thumbprint": "ed25519:7a9f...c21e",
+  "risk_policy": {
+    "high_risk_requires_human": true
+  },
+  "status": "active"
+}
+```
+
+#### 2. Key-Bound Identity & Signer Sidecar (Proof-of-Possession)
+To prevent stolen credential replay, AgentPass adapts **DPoP (Demonstrating Proof-of-Possession)**:
+- At agent startup, the isolated **Signer Sidecar** generates an asymmetric cryptographic key pair (Ed25519 / ECDSA).
+- The **private key never enters the LLM prompt, context window, or logs**.
+- The **public key** is registered with the Pass Issuer and Security Gateway.
+- When the agent plans a tool call, the sidecar generates a cryptographic proof binding:
+  - Target tool and action method (`tool: "email", action: "send_email"`)
+  - Canonical SHA-256 hash of the request payload
+  - Single-use cryptographic nonce
+  - Timestamp (validated against a short freshness window)
+  - Pass reference identifier
+
+```json
+{
+  "pass_id": "PASS-INV-001",
+  "agent_id": "FinanceBot-01",
+  "tool": "email",
+  "action": "send_email",
+  "resource": "attacker@evil-cloud.com",
+  "proof": {
+    "key_id": "agent-key-01",
+    "timestamp": 1780000000,
+    "nonce": "a9c40fd3-728b-4a55-89f4",
+    "body_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "signature": "30450221008df4832...a8b79f"
+  }
+}
+```
+*Security Result:* Even if an attacker captures the `pass_id` from logs, they cannot issue tool requests because they do not control the private key in the isolated sidecar.
+
+#### 3. Runtime Policy Gateway (The Security Enforcement Point)
+The Gateway intercepts all agent traffic. No tool call executes directly. The gateway enforces a strict 6-stage pipeline:
+1. **Signature Verification:** Validates that the request signature mathematically matches the registered agent public key.
+2. **Replay & Nonce Check:** Verifies the nonce has never been used and the timestamp is within bounds.
+3. **Payload Integrity Check:** Recomputes the SHA-256 hash of the incoming request body and compares it to the signed `body_hash`. Any parameter tampering causes immediate failure.
+4. **Scope & Action Budget Engine:** Confirms the requested tool/action exists in the pass's allowed scopes and decrements remaining quota.
+5. **Intent Firewall:** Performs structured comparison between the requested action parameters (destinations, resources, amounts) and the authorized task description.
+6. **Behavioral Twin:** Compares tool call frequency, sequence, and volume against the agent's baseline to detect silent data exfiltration attempts.
+
+#### 4. Policy Verdicts & Execution Engine
+- **🟢 ALLOW (Low Risk):** Safe read or search operation within pass scope. The Gateway retrieves production API credentials from its encrypted **Vault**, executes the mock/real tool, and scrubs sensitive metadata before returning the response to the agent.
+- **🟡 STEP-UP (High Risk):** Irreversible or high-risk operations (e.g., payments, file writes, exports). The Gateway pauses the transaction and requests real-time human operator approval via WebAuthn. Safe sub-tasks continue running.
+- **🔴 DENY (Blocked):** Out-of-scope actions, prompt injection redirects, invalid signatures, or expired passes are rejected with HTTP 403. The protected tool is never called.
+
+#### 5. Monotonic Sub-Agent Delegation
+When a primary agent delegates sub-tasks to child agents, authority can **only narrow, never expand**:
+
+$$\text{Child Scopes} = \text{Parent Scopes} \cap \text{Requested Child Scopes}$$
+
+If a parent pass is revoked by the human operator, all descendant child passes are automatically and immediately revoked across the gateway.
+
+#### 6. Tamper-Evident SHA-256 Hash Chain Audit Trail
+Every verification event is committed to a cryptographically linked audit ledger:
+
+$$\text{Hash}_n = \text{SHA-256}(\text{Hash}_{n-1} + \text{CanonicalJSON}(\text{Event}_n))$$
+
+The console verifies chain integrity continuously. Any manual tampering or modification of historical database rows immediately breaks the chain and triggers a security alert.
+
+#### 7. Emergency Kill Switch
+A one-click revocation switch in the SOC console immediately invalidates an agent's pass, purges all pending step-up requests, and cascades revocation to all spawned sub-agents.
 
 ---
 
@@ -107,8 +217,6 @@ When an agent requests a sensitive operation within its task scope (such as vend
 
 ## 🔒 The Core Security Model: Three Locks
 
-AgentPass enforces three interlocking security barriers to protect against agent compromise:
-
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        THE THREE-LOCK SECURITY MODEL                   │
@@ -130,8 +238,6 @@ AgentPass enforces three interlocking security barriers to protect against agent
 
 ## 🧪 Deterministic Attack Scenarios
 
-AgentPass includes deterministic tests covering the most critical failure modes:
-
 | Scenario | Attack Vector | Gateway Evaluation | Risk Tier | Result | Audit Code |
 |---|---|---|:---:|:---:|:---:|
 | **A. Normal Task** | Agent reads 5 invoice PDFs within scope. | Valid key proof, in-scope (`file.read`), normal volume. | `LOW (12)` | **`ALLOW`** | `SUCCESS_EXECUTED` |
@@ -141,36 +247,6 @@ AgentPass includes deterministic tests covering the most critical failure modes:
 | **E. Sensitive Payment** | Agent executes legitimate ₹450 vendor payment. | In-scope and budgeted, but flagged as high-risk sensitive action. | `HIGH (75)` | **`STEP_UP`** | `HUMAN_APPROVAL_REQ` |
 | **F. Behavioral Anomaly** | Agent suddenly requests 5,000 bulk document exports. | Operational twin detects 25x volume surge against baseline. | `HIGH (88)` | **`DENY`** | `BEHAVIOR_ANOMALY` |
 | **G. Emergency Kill Switch** | Operator clicks **Revoke Agent** on the SOC dashboard. | Pass status changed to `REVOKED`. All child delegates cascade to revoked. | `CRITICAL (100)` | **`DENY`** | `REVOKED_PASS` |
-
----
-
-## 🔗 Tamper-Evident Hash Chain Audit Trail
-
-Every authorization event is linked into a cryptographic hash chain:
-
-$$\text{Hash}_n = \text{SHA-256}(\text{Hash}_{n-1} + \text{CanonicalJSON}(\text{Event}_n))$$
-
-If an attacker modifies a row in the database, the integrity check fails:
-```text
-⚠️ AUDIT INTEGRITY FAILURE: Block #14 hash does not match previous block #13!
-```
-
----
-
-## 📋 Hackathon Presentation Slide Outline (7–10 Slides)
-
-If you are presenting AgentPass for a hackathon, demo day, or security pitch:
-
-1. **Slide 1 — The Hook:** *"An AI agent can be compromised. The question is: does that compromise become a company-wide breach?"*
-2. **Slide 2 — The Problem:** AI agents act on behalf of users. When given static API keys, prompt injection gives attackers full access to enterprise tools.
-3. **Slide 3 — The Core Principle:** Never trust the model to decide its own authority.
-4. **Slide 4 — The Solution:** AgentPass: task-scoped passes, cryptographic key binding, and external gateway enforcement.
-5. **Slide 5 — The Three-Lock Architecture:** Vault (insulated keys) + Bind (proof-of-possession sidecar) + Burn (ephemeral budgets & nonces).
-6. **Slide 6 — Live Attack Demo:** Show a poisoned invoice attempt an unauthorized email transfer $\rightarrow$ instantly blocked by the gateway in < 15ms.
-7. **Slide 7 — Reversible Step-Up & Human Governance:** High-risk payments pause for WebAuthn sign-off while harmless background jobs continue.
-8. **Slide 8 — Tamper-Evident Audit:** Cryptographic SHA-256 hash chain prevents audit tampering.
-9. **Slide 9 — What We Do vs What Others Miss:** Prompt filters can be bypassed; AgentPass enforces security at the runtime execution boundary.
-10. **Slide 10 — Conclusion:** *"AgentPass does not assume the AI will always behave correctly. It guarantees the AI cannot act beyond the authority it was given."*
 
 ---
 

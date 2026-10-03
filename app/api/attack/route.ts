@@ -1,2 +1,0 @@
-import { NextRequest, NextResponse } from "next/server"; import { runScenario } from "@/lib/store";
-export async function POST(req:NextRequest){ const {scenario}=await req.json(); if(!["normal","prompt-injection","stolen-pass","tampering","payment","behavior","revoke"].includes(scenario)) return NextResponse.json({error:"Unsupported scenario"},{status:400}); return NextResponse.json(runScenario(scenario)); }

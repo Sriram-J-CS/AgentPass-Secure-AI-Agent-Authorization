@@ -18,3 +18,7 @@ button { cursor: pointer; }
 .grid-bg { background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px); background-size: 32px 32px; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #27324b; border-radius: 999px; }
+
+.field { width: 100%; border-radius: 0.85rem; border: 1px solid rgba(255,255,255,.10); background: rgba(0,0,0,.20); padding: .75rem 1rem; color: #edf2ff; outline: none; }
+.field:focus { border-color: rgba(96,165,250,.55); }
+select.field option { background: #111827; color: #edf2ff; }

@@ -1,3 +1,4 @@
+import LiveRequestConsole from "./LiveRequestConsole";
 import { Canvas } from "@react-three/fiber";
 import { Float, OrbitControls, Sphere, MeshDistortMaterial } from "@react-three/drei";
 import { motion } from "framer-motion";
@@ -110,7 +111,7 @@ function Vault(){const [rows,setRows]=useState<any[]>([]);const [name,setName]=u
 function AppShell({user,onLogout}:{user:User;onLogout:()=>void}) {
   const [page,setPage]=useState("overview"); const titles:any={overview:"Overview",agents:"Agents",request:"Request console",approvals:"Approvals",requests:"Requests",audit:"Audit logs",architecture:"System architecture",dataflow:"Data flow",vault:"Vault"};
   useEffect(()=>{const wsUrl=API.replace(/^http/,"ws")+"/ws"; const ws=new WebSocket(wsUrl); ws.onopen=()=>ws.send("hello"); return()=>ws.close()},[]);
-  const content:any={overview:<Overview/>,agents:<Agents/>,request:<RequestConsole/>,approvals:<Approvals/>,requests:<Requests/>,audit:<Audit/>,architecture:<Architecture/>,dataflow:<Architecture dataflow/>,vault:<Vault/>};
+  const content:any={overview:<Overview/>,agents:<Agents/>,request:<LiveRequestConsole/>,approvals:<Approvals/>,requests:<Requests/>,audit:<Audit/>,architecture:<Architecture/>,dataflow:<Architecture dataflow/>,vault:<Vault/>};
   return <div className="min-h-screen bg-[#080b14] text-slate-100 lg:flex"><Sidebar page={page} setPage={setPage} user={user} onLogout={onLogout}/><div className="min-w-0 flex-1"><TopBar title={titles[page]}/><main className="mx-auto max-w-7xl p-6">{content[page]}</main></div></div>
 }
 

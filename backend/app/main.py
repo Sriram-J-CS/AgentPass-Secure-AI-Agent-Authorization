@@ -456,8 +456,10 @@ def serialize_request(r: AgentRequest):
     return {"id": r.id, "agent_id": r.agent_id, "method": r.method, "tool": r.tool, "action": r.action, "target": r.target, "proof_valid": r.proof_valid, "scope_ok": r.scope_ok, "intent_ok": r.intent_ok, "taint_status": r.taint_status, "behavior_score": r.behavior_score, "risk_score": r.risk_score, "decision": r.decision, "reason": r.reason, "execution_status": r.execution_status, "result": r.result, "created_at": r.created_at.isoformat()}
 
 @app.post("/api/gateway/requests")
-async def gateway_request(data: GatewayRequest, user: User = Depends(current_user), session: Session = Depends(db)):
-    agent = session.scalar(select(Agent).where(Agent.id == data.agent_id, Agent.owner_id == user.id))
+async def gateway_request(data: GatewayRequest, session: Session = Depends(db)):
+    agent = session.scalar(select(Agent).where(Agent.id == data.agent_id))
+    if agent:
+        user = session.get(User, agent.owner_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     now = int(time.time())

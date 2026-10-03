@@ -410,7 +410,7 @@ def create_agent(data: AgentCreate, user: User = Depends(current_user), session:
     session.add_all([agent, ap])
     audit(session, event_type="AGENT_CREATED", user_id=user.id, agent_id=agent.id, request_id=None, payload={"name": agent.name, "scopes": data.scopes, "expires_at": expires.isoformat()})
     session.commit()
-    return {"agent": {"id": agent.id, "name": agent.name, "task": agent.task, "scopes": agent.scopes, "budget_limit": agent.budget_limit, "budget_used": agent.budget_used, "status": agent.status, "expires_at": expires.isoformat(), "public_key_registered": True}, "agent_pass": raw_pass}
+    return {"agent": {"id": agent.id, "name": agent.name, "task": agent.task, "scopes": agent.scopes, "budget_limit": agent.budget_limit, "budget_used": agent.budget_used, "status": agent.status, "expires_at": expires.isoformat(), "public_key_registered": True}, "agent_pass_id": ap.id, "agent_pass": raw_pass}
 
 @app.get("/api/agents")
 def list_agents(user: User = Depends(current_user), session: Session = Depends(db)):

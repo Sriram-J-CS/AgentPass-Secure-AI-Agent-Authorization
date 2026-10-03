@@ -21,7 +21,7 @@
 
 ---
 
-## 📌 What is AgentPass?
+## 💡 What is AgentPass?
 
 When you give an autonomous AI agent an API key or an OAuth token, you are taking a massive security gamble: **if the agent gets prompt-injected or leaked, the attacker inherits everything that token can touch.**
 
@@ -33,6 +33,46 @@ Traditional IAM protects human-to-service and service-to-service connections. It
 - **Cryptographic Proof-of-Possession:** Private signing keys stay isolated in a sidecar outside the LLM context. Stolen tokens or intercepted pass IDs are useless without the agent's private key signature.
 - **Intent Firewall & Gateway Verification:** Every tool call is intercepted by an external gateway that verifies cryptographic signatures, replay nonces, scope boundaries, and task intent before any tool or API can execute.
 - **Reversible Human Step-Up:** High-risk actions (e.g., payments, file deletions) pause for human sign-off without killing the agent's active safe sub-tasks.
+
+---
+
+## 🏛️ System Architecture
+
+<div align="center">
+<img src="./assets/system_architecture.png" alt="AgentPass System Architecture" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
+<p align="center"><em>AgentPass High-Level Architecture: Distinct trust boundaries separating the Human Operator, the Untrusted AI Model, the Security Gateway, and Target Tools.</em></p>
+</div>
+
+### How the Architecture Works (In Plain English)
+
+The architecture is divided into **four clear trust zones**:
+
+#### 1. Human Operator & Pass Issuer (The Trust Root)
+- The human operator defines a specific job (e.g., *"Summarize this week's invoices"*).
+- The **Pass Issuer** generates a short-lived **Pass** (`PASS-INV-001`) with:
+  - **Explicit Scopes:** `email.read:invoices`, `file.read:invoice_pdf` (no send, delete, or payment permissions).
+  - **Tight Expiry:** 15 minutes maximum lifespan.
+  - **Action Budget:** e.g., max 50 reads, 0 external emails.
+- The agent's public key is registered with the Security Gateway.
+
+#### 2. AI Agent Runtime & Signer Sidecar (The Untrusted Zone)
+- **The AI Agent (LLM):** Treated as **untrusted by design**. Even if the agent is manipulated by a prompt injection attack from an email or invoice, it cannot grant itself more permissions.
+- **Isolated Signer Sidecar:** The private cryptographic signing key (Ed25519) is kept **strictly outside the LLM context** in an isolated sidecar process.
+- When the agent wants to call a tool, it asks the sidecar to sign the request metadata (`Tool + Nonce + Timestamp + SHA256(Body)`). The LLM never sees or extracts the private key.
+
+#### 3. AgentPass Security Gateway (The Enforcement Point)
+Every tool or API call must pass through the external Gateway before reaching real tools. The gateway checks:
+1. **Signature Validity:** Did this request come from the registered agent key?
+2. **Anti-Replay Nonce:** Has this specific nonce or request already been seen?
+3. **Payload Integrity:** Does the SHA-256 hash of the request body match what was signed?
+4. **Scope & Budget:** Is this specific tool and action allowed by the active pass?
+5. **Intent Firewall:** Does the destination/action match the authorized human task?
+6. **Behavioral Twin:** Is the volume or tool sequence abnormal compared to baseline?
+
+#### 4. Decisions & Action Execution
+- **🟢 ALLOW:** Safe, in-scope read actions. The Gateway retrieves credentials from its encrypted vault and executes the tool.
+- **🟡 STEP-UP:** Sensitive actions (e.g., payments or file deletions). The Gateway pauses the call and notifies the human operator for WebAuthn / Passkey sign-off.
+- **🔴 DENY:** Prompt injections, stolen tokens, or out-of-scope actions are blocked instantly. The tool never executes.
 
 ---
 
@@ -88,78 +128,9 @@ AgentPass enforces three interlocking security barriers to protect against agent
 
 ---
 
-## 🏗️ System Architecture & Data Flow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Human as Human Operator
-    participant Issuer as Pass Issuer
-    participant Agent as AI Agent (LLM)
-    participant Sidecar as Signer Sidecar (Key Store)
-    participant Gateway as Security Gateway
-    participant Tools as Mock / Real Tools
-    participant Audit as Hash-Chained Audit Log
-
-    Human->>Issuer: Authorize Task ("Summarize Invoices", 15m)
-    Issuer->>Agent: Issue Task-Scoped Pass (PASS-INV-001)
-    Issuer->>Gateway: Register Pass Metadata & Agent Public Key
-
-    Note over Agent: Attacker injects prompt into invoice document
-    Agent->>Sidecar: Request Tool Signature (tool: email, action: send_email)
-    Sidecar->>Sidecar: Compute Body SHA-256 + Sign with Private Key
-    Sidecar-->>Agent: Return Signed Proof Object
-
-    Agent->>Gateway: POST /agent/request (Pass + Proof + Action)
-    
-    rect rgb(15, 23, 42)
-        Note over Gateway: RUNTIME SECURITY GATEWAY
-        Gateway->>Gateway: 1. Validate Signature (matches Public Key)
-        Gateway->>Gateway: 2. Check Replay Nonce & Expiry
-        Gateway->>Gateway: 3. Verify Request Body SHA-256 Hash
-        Gateway->>Gateway: 4. Check Scopes & Action Budgets
-        Gateway->>Gateway: 5. Evaluate Intent & Behavior Score
-    end
-
-    alt Policy & Intent Approved (Low Risk)
-        Gateway->>Tools: Broker & Execute Action
-        Tools-->>Gateway: Return Tool Output
-        Gateway->>Audit: Append Block to SHA-256 Hash Chain
-        Gateway-->>Agent: Return Sanitized Tool Output
-    else High-Risk Sensitive Action (e.g. Payment)
-        Gateway->>Human: Trigger Step-Up Approval (WebAuthn / Passkey)
-        Human-->>Gateway: Approve / Deny
-        Gateway->>Tools: Execute if Approved
-    else Threat Detected (Out of Scope / Tampered)
-        Gateway->>Audit: Log Blocked Incident (REASON: SCOPE_MISMATCH)
-        Gateway-->>Agent: 403 Forbidden (Action Denied)
-    end
-```
-
----
-
-## ⚡ State Machine: From Request to Execution
-
-```text
-CREATED 
-  ──► AUTHORIZED (Human grants scoped pass)
-  ──► ACTIVE (Agent begins task)
-  ──► REQUESTED (Agent wants tool execution)
-  ──► VERIFIED (Sidecar signature + nonce checked)
-  ──► POLICY_CHECK (Scope and budget verification)
-  ──► INTENT_CHECK (Task alignment check)
-  ──► BEHAVIOR_CHECK (Operational anomaly score)
-  ──► RISK_DECISION
-         ├── ALLOW   ──► EXECUTE TOOL ──► AUDIT LOG
-         ├── STEP_UP ──► HUMAN APPROVAL ──► [Approved: EXECUTE | Denied: ABORT]
-         └── DENY    ──► BLOCK CALL ──► AUDIT LOG
-```
-
----
-
 ## 🧪 Deterministic Attack Scenarios
 
-AgentPass is built with a deterministic test suite covering the most critical failure modes:
+AgentPass includes deterministic tests covering the most critical failure modes:
 
 | Scenario | Attack Vector | Gateway Evaluation | Risk Tier | Result | Audit Code |
 |---|---|---|:---:|:---:|:---:|
@@ -186,55 +157,6 @@ If an attacker modifies a row in the database, the integrity check fails:
 
 ---
 
-## 💻 Tech Stack
-
-- **Backend:** Python 3.11+, FastAPI, Pydantic v2, SQLite, Uvicorn
-- **Cryptography:** Cryptography / WebCrypto (Ed25519 & ECDSA key pairs, SHA-256 canonical hashing)
-- **Signer Sidecar:** Isolated process holding private signing keys outside LLM context
-- **Frontend Dashboard:** React 18, TypeScript, Tailwind CSS, Lucide Icons
-- **Mock Sandbox:** Isolated Email, File System, and Payment tool simulators
-
----
-
-## 🚀 Quickstart & Local Setup
-
-### 1. Clone the Repository
-```bash
-git clone https://github.com/Sriram-J-CS/AgentPass-Secure-AI-Agent-Authorization.git
-cd AgentPass-Secure-AI-Agent-Authorization
-```
-
-### 2. Start the FastAPI Security Gateway
-```bash
-cd backend
-python -m venv venv
-
-# Windows:
-.\venv\Scripts\activate
-# Linux/macOS:
-# source venv/bin/activate
-
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-```
-*API documentation available at `http://localhost:8000/docs`*
-
-### 3. Start the Frontend SOC Dashboard
-```bash
-cd ../frontend
-npm install
-npm run dev
-```
-*Dashboard opens at `http://localhost:5173`*
-
-### 4. Run the Security Tests
-```bash
-cd ../backend
-pytest tests/ -v
-```
-
----
-
 ## 📋 Hackathon Presentation Slide Outline (7–10 Slides)
 
 If you are presenting AgentPass for a hackathon, demo day, or security pitch:
@@ -249,24 +171,6 @@ If you are presenting AgentPass for a hackathon, demo day, or security pitch:
 8. **Slide 8 — Tamper-Evident Audit:** Cryptographic SHA-256 hash chain prevents audit tampering.
 9. **Slide 9 — What We Do vs What Others Miss:** Prompt filters can be bypassed; AgentPass enforces security at the runtime execution boundary.
 10. **Slide 10 — Conclusion:** *"AgentPass does not assume the AI will always behave correctly. It guarantees the AI cannot act beyond the authority it was given."*
-
----
-
-## 🔄 Repository Rename & Git Remote Sync
-
-To rename this repository to `AgentPass-Secure-AI-Agent-Authorization`:
-
-1. Go to your repository settings:  
-   👉 **[https://github.com/Sriram-J-CS/i-need-for-a-ppt-slide-AgentPass-Secure-AI-Agent-Authorization/settings](https://github.com/Sriram-J-CS/i-need-for-a-ppt-slide-AgentPass-Secure-AI-Agent-Authorization/settings)**
-2. In the **Repository name** field under **General**, change it to:
-   ```text
-   AgentPass-Secure-AI-Agent-Authorization
-   ```
-3. Click **Rename**.
-4. Update your local git remote:
-   ```bash
-   git remote set-url origin https://github.com/Sriram-J-CS/AgentPass-Secure-AI-Agent-Authorization.git
-   ```
 
 ---
 

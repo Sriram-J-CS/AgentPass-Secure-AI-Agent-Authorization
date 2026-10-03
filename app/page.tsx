@@ -225,7 +225,7 @@ function ScreenView(props:{screen:Screen;state:AppState;run:(s:string)=>void;run
  if(screen==="overview") return <Overview state={state} setScreen={props.setScreen}/>;
  if(screen==="agents") return <Agents state={state} revoke={props.revoke}/>;
  if(screen==="passes") return <Passes state={state}/>;
- if(screen==="attacks") return <AttackCenter state={state} {...props}/>;
+ if(screen==="attacks") { const {state: _state, ...attackProps}=props; return <AttackCenter state={state} {...attackProps}/>; };
  if(screen==="requests") return <Requests state={state} setSelected={props.setSelected}/>;
  if(screen==="approvals") return <Approvals state={state} refresh={props.refresh}/>;
  if(screen==="causal") return <Causal selected={props.selected}/>;

@@ -1,0 +1,28 @@
+# Node dependencies & build
+node_modules/
+.next/
+out/
+build/
+.pnp
+.pnp.js
+
+# Environment & local secrets
+.env*.local
+.env
+data/
+master.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.sqlite3
+*.db
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

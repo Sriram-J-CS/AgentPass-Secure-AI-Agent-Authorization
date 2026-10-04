@@ -14,8 +14,8 @@
 
 <br/>
 
-<img src="./assets/agentpass_ui_suite.png" alt="AgentPass UI Suite - All 10 Screens" width="100%" style="border-radius: 12px; border: 1px solid #1e293b; box-shadow: 0 20px 50px rgba(0,0,0,0.8);" />
-<p align="center"><em>AgentPass Complete Security Console: 1. Landing Page, 2. Login Portal, 3. Main SOC Overview, 4. Agents Directory, 5. Attack Center, 6. Attack Simulation Pipeline, 7. Human Step-Up Approval, 8. Causal Trace Graph, 9. Key Vault, 10. System Architecture.</em></p>
+<img src="./assets/overview_dashboard.png" alt="AgentPass SOC Overview Dashboard" width="100%" style="border-radius: 12px; border: 1px solid #1e293b; box-shadow: 0 20px 50px rgba(0,0,0,0.8);" />
+<p align="center"><em>AgentPass Real-Time Security Operations Center (SOC) Dashboard</em></p>
 
 </div>
 
@@ -119,8 +119,12 @@ The architecture separates responsibilities into four distinct trust boundaries:
 ### 1. Landing Page (`/landing`)
 High-impact product introduction featuring the glowing 3D zero-trust architecture diagram, core value pillars (*Zero API keys in agent*, *100% Key-bound requests*, *Real-time risk enforcement*), and quick links to the security console.
 
+<img src="./assets/landing_page.png" alt="AgentPass Landing Page" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
+
 ### 2. Login Portal (`/login`)
 Secure workspace sign-in interface with show/hide password toggle and enterprise security assurances.
+
+<img src="./assets/login_page.png" alt="AgentPass Login Portal" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
 
 ### 3. Main SOC Overview Dashboard (`/`)
 Live operational center displaying:
@@ -132,10 +136,14 @@ Live operational center displaying:
 - **Active Pass Card:** Shows remaining TTL countdown, granted scopes, and plain-language worst-case blast radius.
 - **Emergency Kill Switch:** One-click revocation dialog that immediately invalidates active credentials.
 
+<img src="./assets/overview_dashboard.png" alt="Main SOC Overview Dashboard" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
+
 ### 4. Agent Directory & Scenario Runner
 Directory of registered agent identities and interactive scenario runner. Run real scenarios against the sidecar (`normal_task`, `prompt_injection`, `canary_trip`, `legit_payment`, `bulk_access`, `echo_leak`) to observe per-step latency, decision chips, parameter inspection, and direct links to causal trace graphs.
 
-### 5. Attack Center
+<img src="./assets/agent_runner.png" alt="Agent Directory and Scenario Runner" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
+
+### 5. Attack Center & Simulation
 Adversarial testing suite featuring 6 real attack vectors:
 1. **Stolen Ticket:** Attacker extracts an unused ticket and attempts to sign with their own key. *(Blocked: KEY_MISMATCH)*
 2. **Replay Captured Request:** Attacker re-sends wire bytes captured on the network. *(Blocked: PROOF_REPLAY)*
@@ -144,24 +152,36 @@ Adversarial testing suite featuring 6 real attack vectors:
 5. **Reuse Spent Ticket:** Attacker re-submits an already-burned ticket. *(Blocked: TICKET_ALREADY_USED + Chain Frozen)*
 6. **Direct Tool Bypass:** Attacker attempts to call tools directly without going through AgentPass. *(Blocked: 401 INVALID_TOOL_KEY)*
 
-### 6. Attack Simulation & Security Pipeline Verification
 Deep-dive view for simulated attacks showing:
 - Scenario overview & malicious document excerpts.
 - **Security Pipeline Verification Checklist:** Identity Verification, Proof-of-Possession, Scope Check, Intent Analysis, Behavior Check, and Risk Assessment.
 - Raw HTTP response inspection and chain unfreeze action if frozen.
 
-### 7. Human Step-Up Approval
+<img src="./assets/attack_center.png" alt="Attack Center" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
+
+### 6. Human Step-Up Approval
 Human-in-the-loop authorization card for sensitive operations:
 - Displays exact tool, action, and request parameters (e.g., payee `acct_vendor_1`, amount `₹450`).
 - Cryptographic SHA-256 request hash binding.
 - Live seconds countdown timer (`seconds_left`).
 - One-click Approve / Deny actions.
 
-### 8. Causal Trace Graph
+<img src="./assets/human_approvals.png" alt="Human Step-Up Approval" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
+
+### 7. Causal Trace Graph
 Interactive graph visualizer powered by Cytoscape.js:
 - Trace selector for recent scenario runs.
 - Directed node graph tracking request progression through policy checks to final verdict.
 - Color-coded decision nodes with node inspector displaying timestamps, reasons, and evidence.
+
+<img src="./assets/causal_trace.png" alt="Causal Trace Graph" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
+
+### 8. Audit Ledger & Cryptographic Verification
+Tamper-evident audit trail backed by SHA-256 hash chains:
+- Sequenced log entries with previous hash, event hash, and signature validation.
+- Interactive Tamper Demonstration verifying chain break detection in real time.
+
+<img src="./assets/audit_ledger.png" alt="Audit Ledger" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
 
 ### 9. Key Vault
 Encrypted credential management interface:
@@ -169,12 +189,30 @@ Encrypted credential management interface:
 - Fingerprints (first 12 characters of SHA-256 hash), usage counters, and last used timestamps.
 - **Zero-knowledge guarantee:** Secret values are never returned to the browser or agent runtime.
 
-### 10. World Data & Tool State
+<img src="./assets/key_vault.png" alt="Key Vault" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
+
+### 10. Ticket Relay & Chain State
+Live sequence visualizer demonstrating The Three Locks in action:
+- Visual representation of tickets in the relay chain: active, burned, and superseded.
+- Instant replay detection and automatic chain freezing upon unauthorized ticket re-use.
+
+<img src="./assets/ticket_relay.png" alt="Ticket Relay" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
+
+### 11. System Architecture
+Deep-dive architectural overview mapping the trust boundaries:
+- Human Operator, Isolated Signer Sidecar, Untrusted Agent, and AgentPass Gateway.
+- Detailed breakdown of Lock 1 (Vault), Lock 2 (Bind), and Lock 3 (Burn).
+
+<img src="./assets/system_architecture.png" alt="System Architecture" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
+
+### 12. World Data & Tool State
 Live ledger of mock services updated exclusively by legitimate tool calls:
 - **Inbox:** Emails table highlighting `[EXTERNAL - UNTRUSTED]` messages that trigger session taint.
 - **Sent Emails:** Ledger of dispatched outbound messages.
 - **Payments:** Ledger of executed financial transactions.
 - **Filesystem:** File storage highlighting `[CANARY TRIPWIRE]` tripwire tokens.
+
+<img src="./assets/world_data.png" alt="World Data" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
 
 ---
 
